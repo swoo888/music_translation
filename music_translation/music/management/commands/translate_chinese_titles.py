@@ -123,6 +123,9 @@ class Command(base.NoArgsCommand):
         soup = BeautifulSoup(resp_data, 'html.parser')
         resp_txt = soup.findAll('textarea', attrs={'name': "zhongwen"}, limit=1)
         if not resp_txt:
+            strip_txt = re.sub(r'[\x00-\x7f]', r'', zhong_wen_txt)  # strip all ASCII
+            if strip_txt != zhong_wen_txt:
+                return Command.http_translate_chinese_txt(strip_txt)
             raise Exception('Data from web is empty')
 
         title = resp_txt[0].get_text().title()

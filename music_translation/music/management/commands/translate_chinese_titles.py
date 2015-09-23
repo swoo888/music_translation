@@ -63,6 +63,7 @@ class Command(base.NoArgsCommand):
             shutil.rmtree(destination_music_folder, ignore_errors=True)
         os.mkdir(destination_music_folder)
 
+        exclude_mp3_match = re.compile(r'\(\d+\)$', re.I | re.U)
         for dir_path, dir_names, file_names in os.walk(self.folder_to_translate):
             dir_name = os.path.split(dir_path)[1]
             if dir_name not in self.FOLDERS_IGNORE:
@@ -80,7 +81,7 @@ class Command(base.NoArgsCommand):
                         os.mkdir(destination_dir)
 
                     for filename in file_names:
-                        if filename.endswith('.mp3') and not re.match('\(\d+\)$', os.path.splitext(filename)[0]):
+                        if filename.endswith('.mp3') and not exclude_mp3_match.search(os.path.splitext(filename)[0]):
                             # ignore duplicate mp3 files that ends in file_name(1).mp3 etc..
                             file_name_translated = filename
                             try:

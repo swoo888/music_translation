@@ -59,47 +59,51 @@ class Command(base.NoArgsCommand):
     def translate_chinese_titles(self):
         destination_music_folder = os.path.join(os.path.dirname(self.folder_to_translate),
                                                 'translate-{}'.format(datetime.datetime.now().strftime('%m-%d-%y')))
-        if os.path.exists(destination_music_folder):
-            shutil.rmtree(destination_music_folder, ignore_errors=True)
-        os.mkdir(destination_music_folder)
+        if not os.path.exists(destination_music_folder):
+            # shutil.rmtree(destination_music_folder, ignore_errors=True)
+            os.mkdir(destination_music_folder)
 
-        exclude_mp3_match = re.compile(r'\(\d+\)$', re.I | re.U)
+        # exclude_mp3_match = re.compile(r'\(\d+\)$', re.I | re.U)
         for dir_path, dir_names, file_names in os.walk(self.folder_to_translate):
             dir_name = os.path.split(dir_path)[1]
             if dir_name not in self.FOLDERS_IGNORE:
+                logger.info('dir_name: %s', dir_name)
+                dir_name_translated = dir_name
                 try:
                     dir_name.encode('ascii')
                 except UnicodeEncodeError:  # translate only non ascii chars
-                    logger.info('dir_name: %s', dir_name)
                     dir_name_translated = Command.http_translate_chinese_txt(dir_name)
                     if not dir_name_translated:
-                        raise Exception('Cant translate chinese directory name')
-                    logger.info(dir_name_translated)
-                    destination_dir = os.path.join(destination_music_folder,
-                                                   '<{}>{}'.format(dir_name_translated, dir_name))
-                    if not os.path.exists(destination_dir):
-                        os.mkdir(destination_dir)
+                        # raise Exception('Cant translate chinese directory name')
+                        dir_name_translated = dir_name
+                logger.info(dir_name_translated)
+                destination_dir = os.path.join(destination_music_folder,
+                                               '<{}>{}'.format(dir_name_translated, dir_name))
+                if not os.path.exists(destination_dir):
+                    os.mkdir(destination_dir)
 
-                    for filename in file_names:
-                        if filename.endswith('.mp3') and not exclude_mp3_match.search(os.path.splitext(filename)[0]):
-                            # ignore duplicate mp3 files that ends in file_name(1).mp3 etc..
-                            file_name_translated = filename
-                            try:
-                                filename.encode('ascii')
-                            except UnicodeEncodeError:
-                                logger.info(filename)
-                                file_name_translated = Command.http_translate_chinese_txt(filename)
-                                if not file_name_translated:
-                                    raise Exception('Cant translate chinese file name')
-                                logger.info(file_name_translated)
-                                file_name_translated = '<{}>{}'.format(file_name_translated, filename)
+                for filename in file_names:
+                    if filename.endswith('.mp3'):
+                        # if filename.endswith('.mp3') and not exclude_mp3_match.search(os.path.splitext(filename)[0]):
+                        # ignore duplicate mp3 files that ends in file_name(1).mp3 etc..
+                        file_name_translated = filename
+                        logger.info(filename)
+                        try:
+                            filename.encode('ascii')
+                        except UnicodeEncodeError:
+                            file_name_translated = Command.http_translate_chinese_txt(filename)
+                            if not file_name_translated:
+                                # raise Exception('Cant translate chinese file name')
+                                file_name_translated = filename
+                        logger.info(file_name_translated)
+                        file_name_translated = '<{}>{}'.format(file_name_translated, filename)
 
-                            dest_filename = os.path.join(destination_dir, file_name_translated)
-                            src_filename = os.path.join(dir_path, filename)
-                            logger.info('copy src_filename:{} To dest_filename:{}'.format(src_filename, dest_filename))
-                            threading.Thread(None, target=lambda: copy(src_filename, dest_filename)).start()
-                            if self.test_mode:
-                                return
+                        dest_filename = os.path.join(destination_dir, file_name_translated)
+                        src_filename = os.path.join(dir_path, filename)
+                        logger.info('copy src_filename:{} To dest_filename:{}'.format(src_filename, dest_filename))
+                        threading.Thread(None, target=lambda: copy(src_filename, dest_filename)).start()
+                        if self.test_mode:
+                            return
 
     @staticmethod
     def http_translate_chinese_txt(zhong_wen_txt):

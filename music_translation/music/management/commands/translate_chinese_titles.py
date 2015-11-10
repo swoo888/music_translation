@@ -1,25 +1,62 @@
-import logging
-from optparse import make_option
 import datetime
-import threading
-from urllib.request import urlopen
+import logging
+import multiprocessing
+import subprocess
+from optparse import make_option
 from urllib.parse import urlencode
+from urllib.request import urlopen
 
-import shutil
 import lockfile
-from django.core.management import base
 import os
-from bs4 import BeautifulSoup
 import re
+from bs4 import BeautifulSoup
+from django.core.management import base
 from shutil import copy
 
 logger = logging.getLogger('music_translation.music.translate_chinese_titles')
+
+
+def copy_music_file_to_dest(src_filename, dest_filename):
+    logger.info('copy_music_file_to_dest, ' + src_filename + ', ' + dest_filename)
+    if dest_filename.endswith('.flac'):
+        root, ext = os.path.splitext(dest_filename)
+        dest_filename_mp3 = root + '.mp3'
+        xld = '/usr/local/bin/xld -f mp3 -o "{}" --bit=320kbps --samplerate=44100 "{}"'.format(dest_filename_mp3, src_filename)
+        subprocess.call(xld, shell=True)
+    else:
+        copy(src_filename, dest_filename)
+
+
+def translate_file_to_dest(src_dir, src_filename, dest_dir):
+    file_name_translated = src_filename
+    logger.info(src_filename)
+    try:
+        src_filename.encode('ascii')
+    except UnicodeEncodeError:
+        file_name_translated = Command.http_translate_chinese_txt(src_filename)
+        if not file_name_translated:
+            # raise Exception('Cant translate chinese file name')
+            file_name_translated = src_filename
+    logger.info(file_name_translated)
+    file_name_translated = '{}{}{}{}'.format(
+        Command.LEFT_SEP, file_name_translated, Command.RIGHT_SEP, src_filename)
+
+    dest_filename = os.path.join(dest_dir, file_name_translated)
+    src_filename = os.path.join(src_dir, src_filename)
+    logger.info('copy src_filename:{} To dest_filename:{}'.format(src_filename, dest_filename))
+    copy_music_file_to_dest(src_filename, dest_filename)
+
 
 
 class Command(base.NoArgsCommand):
     MUSIC_FOLDER = '/Users/StevenWoo/Music/favorite'
     FOLDERS_IGNORE = ['favorite', 'Images', 'Lyrics', 'System Volume Information']
     # ignore these folder, they are not music folders
+    MAX_FILES = 255
+    RIGHT_SEP = '>'
+    LEFT_SEP = '<'
+    FIRST_CHR_IDX = 1  # after <
+
 
     option_list = base.NoArgsCommand.option_list + (
         make_option('-s', action='store_true', dest='silentmode',
@@ -77,33 +114,86 @@ class Command(base.NoArgsCommand):
                         # raise Exception('Cant translate chinese directory name')
                         dir_name_translated = dir_name
                 logger.info(dir_name_translated)
-                destination_dir = os.path.join(destination_music_folder,
-                                               '<{}>{}'.format(dir_name_translated, dir_name))
+                destination_dir = os.path.join(destination_music_folder, '{}{}{}{}'.format(
+                    Command.LEFT_SEP, dir_name_translated, Command.RIGHT_SEP, dir_name))
                 if not os.path.exists(destination_dir):
                     os.mkdir(destination_dir)
 
+                pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
                 for filename in file_names:
-                    if filename.endswith('.mp3'):
+                    if filename.endswith('.mp3') or filename.endswith('.flac'):
                         # if filename.endswith('.mp3') and not exclude_mp3_match.search(os.path.splitext(filename)[0]):
                         # ignore duplicate mp3 files that ends in file_name(1).mp3 etc..
-                        file_name_translated = filename
-                        logger.info(filename)
-                        try:
-                            filename.encode('ascii')
-                        except UnicodeEncodeError:
-                            file_name_translated = Command.http_translate_chinese_txt(filename)
-                            if not file_name_translated:
-                                # raise Exception('Cant translate chinese file name')
-                                file_name_translated = filename
-                        logger.info(file_name_translated)
-                        file_name_translated = '<{}>{}'.format(file_name_translated, filename)
 
-                        dest_filename = os.path.join(destination_dir, file_name_translated)
-                        src_filename = os.path.join(dir_path, filename)
-                        logger.info('copy src_filename:{} To dest_filename:{}'.format(src_filename, dest_filename))
-                        threading.Thread(None, target=lambda: copy(src_filename, dest_filename)).start()
+                        pool.apply_async(translate_file_to_dest, args=(dir_path, filename, destination_dir))
                         if self.test_mode:
                             return
+                pool.close()
+                pool.join()
+                Command.organize_songs(destination_dir)
+
+
+    @staticmethod
+    def organize_songs(mp3_folder):
+        # organize songs into max 255 each per folder
+        for dir_path, dir_names, file_names in os.walk(mp3_folder):
+            if dir_path == mp3_folder:
+                if len(file_names) > Command.MAX_FILES:
+                    next_song_list = sorted(file_names)
+                    songs_cnt = len(next_song_list)
+                    while songs_cnt >= 1:
+                        first_char = next_song_list[0][Command.FIRST_CHR_IDX]
+                        last_song_idx = min(songs_cnt - 1, Command.MAX_FILES -1)
+                        last_char = next_song_list[last_song_idx][Command.FIRST_CHR_IDX]
+                        last_song_next_idx = min(songs_cnt - 1, Command.MAX_FILES)
+                        if first_char != last_char and last_song_idx < last_song_next_idx and last_char == \
+                                next_song_list[last_song_next_idx][Command.FIRST_CHR_IDX]:
+                            last_char = chr(ord(last_char) - 1)
+                            # use prior char, try to group more of same letter into one group
+                        sub_name = first_char + '-' + last_char
+                        dest_mp3_folder = Command.get_folder_name_with_sub_name(mp3_folder, sub_name)
+                        next_song_list = Command.move_songs(dir_path, next_song_list, first_char, last_char, dest_mp3_folder)
+                        if songs_cnt == len(next_song_list):
+                            raise Exception('Organize songs failed; song list not changing')
+                        songs_cnt = len(next_song_list)
+                    return
+
+
+    @staticmethod
+    def move_songs(dir_path, sorted_file_names, first_char, last_char, dest_mp3_folder):
+        cnt = 1
+        songs_renamed = []
+        for song in sorted_file_names:
+            if first_char <= song[Command.FIRST_CHR_IDX] <= last_char:
+                dir, name = os.path.split(song)
+                dest_mp3_filename = os.path.join(dest_mp3_folder, name)
+                src_mp3_filename = os.path.join(dir_path, song)
+                os.rename(src_mp3_filename, dest_mp3_filename)
+                songs_renamed.append(song)
+                cnt += 1
+                if cnt >= Command.MAX_FILES:
+                    break
+        next_song_list = [x for x in sorted_file_names if x not in songs_renamed]
+        return next_song_list
+
+
+    @staticmethod
+    def get_folder_name_with_sub_name(dir_path, sub_name):
+        if not dir_path.index(Command.RIGHT_SEP):
+            dir_path = '{}{}{}'.format(Command.LEFT_SEP, dir_path, Command.RIGHT_SEP)
+        cnt = 1
+        while cnt < 20:
+            if cnt >= 2:
+                sub_name_rep = sub_name + str(cnt)
+            else:
+                sub_name_rep = sub_name
+
+            path_with_sub_name = dir_path.replace(Command.RIGHT_SEP, Command.RIGHT_SEP + sub_name_rep, 1)
+            if not os.path.exists(path_with_sub_name):
+                os.mkdir(path_with_sub_name)
+                return path_with_sub_name
+            cnt += 1
+
 
     @staticmethod
     def http_translate_chinese_txt(zhong_wen_txt):

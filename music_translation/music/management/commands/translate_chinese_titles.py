@@ -17,11 +17,12 @@ logger = logging.getLogger('music_translation.music.translate_chinese_titles')
 
 
 def copy_music_file_to_dest(src_filename, dest_filename):
-    logger.info('copy_music_file_to_dest, ' + src_filename + ', ' + dest_filename)
+    logger.info('copy_music_file_to_dest, {}, {}'.format(src_filename, dest_filename))
     if dest_filename.endswith('.flac'):
         root, ext = os.path.splitext(dest_filename)
         dest_filename_mp3 = root + '.mp3'
-        xld = '/usr/local/bin/xld -f mp3 -o "{}" --bit=320kbps --samplerate=44100 "{}"'.format(dest_filename_mp3, src_filename)
+        xld = '/usr/local/bin/xld -f mp3 -o "{}" --bit=320kbps --samplerate=44100 "{}"'.format(dest_filename_mp3,
+                                                                                               src_filename)
         subprocess.call(xld, shell=True)
     else:
         copy(src_filename, dest_filename)
@@ -47,7 +48,6 @@ def translate_file_to_dest(src_dir, src_filename, dest_dir):
     copy_music_file_to_dest(src_filename, dest_filename)
 
 
-
 class Command(base.NoArgsCommand):
     MUSIC_FOLDER = '/Users/StevenWoo/Music/favorite'
     FOLDERS_IGNORE = ['favorite', 'Images', 'Lyrics', 'System Volume Information']
@@ -56,7 +56,7 @@ class Command(base.NoArgsCommand):
     RIGHT_SEP = '>'
     LEFT_SEP = '<'
     FIRST_CHR_IDX = 1  # after <
-
+    EASY_FIND_FOLDER = True # use only letter per folder: A, B, C etc.
 
     option_list = base.NoArgsCommand.option_list + (
         make_option('-s', action='store_true', dest='silentmode',
@@ -132,7 +132,6 @@ class Command(base.NoArgsCommand):
                 pool.join()
                 Command.organize_songs(destination_dir)
 
-
     @staticmethod
     def organize_songs(mp3_folder):
         # organize songs into max 255 each per folder
@@ -151,13 +150,17 @@ class Command(base.NoArgsCommand):
                             last_char = chr(ord(last_char) - 1)
                             # use prior char, try to group more of same letter into one group
                         sub_name = first_char + '-' + last_char
+                        if Command.EASY_FIND_FOLDER:
+                            # EASY FIND mode, organize songs into each starting Letter folder for easy find
+                            last_char = first_char
+                            sub_name = first_char
                         dest_mp3_folder = Command.get_folder_name_with_sub_name(mp3_folder, sub_name)
-                        next_song_list = Command.move_songs(dir_path, next_song_list, first_char, last_char, dest_mp3_folder)
+                        next_song_list = Command.move_songs(
+                                dir_path, next_song_list, first_char, last_char, dest_mp3_folder)
                         if songs_cnt == len(next_song_list):
                             raise Exception('Organize songs failed; song list not changing')
                         songs_cnt = len(next_song_list)
                     return
-
 
     @staticmethod
     def move_songs(dir_path, sorted_file_names, first_char, last_char, dest_mp3_folder):
@@ -176,7 +179,6 @@ class Command(base.NoArgsCommand):
         next_song_list = [x for x in sorted_file_names if x not in songs_renamed]
         return next_song_list
 
-
     @staticmethod
     def get_folder_name_with_sub_name(dir_path, sub_name):
         if not dir_path.index(Command.RIGHT_SEP):
@@ -193,7 +195,6 @@ class Command(base.NoArgsCommand):
                 os.mkdir(path_with_sub_name)
                 return path_with_sub_name
             cnt += 1
-
 
     @staticmethod
     def http_translate_chinese_txt(zhong_wen_txt):

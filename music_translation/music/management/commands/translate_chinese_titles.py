@@ -3,6 +3,7 @@ import logging
 import multiprocessing
 import subprocess
 from optparse import make_option
+from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
@@ -119,7 +120,7 @@ class Command(base.NoArgsCommand):
                 if not os.path.exists(destination_dir):
                     os.mkdir(destination_dir)
 
-                pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+                pool = multiprocessing.Pool()
                 for filename in file_names:
                     if filename.endswith('.mp3') or filename.endswith('.flac'):
                         # if filename.endswith('.mp3') and not exclude_mp3_match.search(os.path.splitext(filename)[0]):
@@ -206,22 +207,33 @@ class Command(base.NoArgsCommand):
             'zwzyp_duozhongduyin': 0,
         }).encode('utf-8')
 
-        response = urlopen(
-            url='http://zhongwenzhuanpinyin.51240.com/web_system/51240_com_www/system/file/' +
-                'zhongwenzhuanpinyin/data/?ajaxtimestamp=144295876963',
-            data=data)
+        cnt = 0
+        resp_data = ''
+        while cnt < 3:
+            try:
+                response = urlopen(
+                    url='http://zhongwenzhuanpinyin.51240.com/web_system/51240_com_www/system/file/' +
+                        'zhongwenzhuanpinyin/data/?ajaxtimestamp=144295876963',
+                    data=data)
+            except URLError:
+                logger.info('web connection failed')
+            else:
+                if response.reason != 'OK':
+                    logger.info('Cant obtain translation data from web.')
+                else:
+                    resp_data = response.read()
+                    break
+            cnt += 1
 
-        if response.reason != 'OK':
-            raise Exception('Cant obtain translation data from web.')
-
-        resp_data = response.read()
         soup = BeautifulSoup(resp_data, 'html.parser')
         resp_txt = soup.findAll('textarea', attrs={'name': "zhongwen"}, limit=1)
         if not resp_txt:
             strip_txt = re.sub(r'[\x00-\x7f]', r'', zhong_wen_txt)  # strip all ASCII
             if strip_txt != zhong_wen_txt:
                 return Command.http_translate_chinese_txt(strip_txt)
-            raise Exception('Data from web is empty')
-
-        title = resp_txt[0].get_text().title()
-        return re.sub(r'\s+', '', title)
+            else:
+                logger.info('Data from web is empty')
+                return zhong_wen_txt
+        else:
+            title = resp_txt[0].get_text().title()
+            return re.sub(r'\s+', '', title)

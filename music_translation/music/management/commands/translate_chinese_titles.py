@@ -155,6 +155,7 @@ class Command(base.NoArgsCommand):
                             # EASY FIND mode, organize songs into each starting Letter folder for easy find
                             last_char = first_char
                             sub_name = first_char
+                        sub_name = sub_name.upper()
                         dest_mp3_folder = Command.get_folder_name_with_sub_name(mp3_folder, sub_name)
                         next_song_list = Command.move_songs(
                                 dir_path, next_song_list, first_char, last_char, dest_mp3_folder)

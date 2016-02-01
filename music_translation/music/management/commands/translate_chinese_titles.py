@@ -57,7 +57,7 @@ class Command(base.NoArgsCommand):
     RIGHT_SEP = '>'
     LEFT_SEP = '<'
     FIRST_CHR_IDX = 1  # after <
-    EASY_FIND_FOLDER = True # use only letter per folder: A, B, C etc.
+    FOLDER_PER_ARTIST = True  # organize songs into their own artist folder
 
     option_list = base.NoArgsCommand.option_list + (
         make_option('-s', action='store_true', dest='silentmode',
@@ -138,39 +138,68 @@ class Command(base.NoArgsCommand):
         # organize songs into max 255 each per folder
         for dir_path, dir_names, file_names in os.walk(mp3_folder):
             if dir_path == mp3_folder:
-                if len(file_names) > Command.MAX_FILES:
+                if not Command.FOLDER_PER_ARTIST:
+                    if len(file_names) > Command.MAX_FILES:
+                        next_song_list = sorted(file_names)
+                        songs_cnt = len(next_song_list)
+                        while songs_cnt >= 1:
+                            first_char = next_song_list[0][Command.FIRST_CHR_IDX]
+                            # organize songs into each starting Letter folder for easy find
+                            last_char = first_char
+                            sub_name = first_char
+                            sub_name = sub_name.upper()
+                            dest_mp3_folder = Command.get_folder_name_with_sub_name(mp3_folder, sub_name)
+                            next_song_list = Command.move_songs_by_first_char(
+                                    dir_path, next_song_list, first_char, last_char, dest_mp3_folder)
+                            if songs_cnt == len(next_song_list):
+                                raise Exception('Organize songs failed; song list not changing')
+                            songs_cnt = len(next_song_list)
+                        return
+                else:
                     next_song_list = sorted(file_names)
                     songs_cnt = len(next_song_list)
                     while songs_cnt >= 1:
-                        first_char = next_song_list[0][Command.FIRST_CHR_IDX]
-                        last_song_idx = min(songs_cnt - 1, Command.MAX_FILES -1)
-                        last_char = next_song_list[last_song_idx][Command.FIRST_CHR_IDX]
-                        last_song_next_idx = min(songs_cnt - 1, Command.MAX_FILES)
-                        if first_char != last_char and last_song_idx < last_song_next_idx and last_char == \
-                                next_song_list[last_song_next_idx][Command.FIRST_CHR_IDX]:
-                            last_char = chr(ord(last_char) - 1)
-                            # use prior char, try to group more of same letter into one group
-                        sub_name = first_char + '-' + last_char
-                        if Command.EASY_FIND_FOLDER:
-                            # EASY FIND mode, organize songs into each starting Letter folder for easy find
-                            last_char = first_char
-                            sub_name = first_char
-                        sub_name = sub_name.upper()
+                        # <ChenYiWen-TaoHuaZhanXiaoRong.MP3>陈忆文 - 桃花展笑容.mp3
+                        first_artist_name = Command.get_artist_name(next_song_list[0])
+                        last_artist_name = first_artist_name
+                        sub_name = first_artist_name
                         dest_mp3_folder = Command.get_folder_name_with_sub_name(mp3_folder, sub_name)
-                        next_song_list = Command.move_songs(
-                                dir_path, next_song_list, first_char, last_char, dest_mp3_folder)
+                        next_song_list = Command.move_songs_by_artist_name(
+                                dir_path, next_song_list, first_artist_name, last_artist_name, dest_mp3_folder)
                         if songs_cnt == len(next_song_list):
                             raise Exception('Organize songs failed; song list not changing')
                         songs_cnt = len(next_song_list)
                     return
 
     @staticmethod
-    def move_songs(dir_path, sorted_file_names, first_char, last_char, dest_mp3_folder):
+    def get_artist_name(song_name):
+        # <ChenYiWen-TaoHuaZhanXiaoRong.MP3>陈忆文 - 桃花展笑容.mp3
+        return song_name.split('-')[0][Command.FIRST_CHR_IDX:]
+
+    @staticmethod
+    def move_songs_by_first_char(dir_path, sorted_file_names, first_char, last_char, dest_mp3_folder):
         cnt = 1
         songs_renamed = []
         for song in sorted_file_names:
             if first_char <= song[Command.FIRST_CHR_IDX] <= last_char:
                 dir, name = os.path.split(song)
+                dest_mp3_filename = os.path.join(dest_mp3_folder, name)
+                src_mp3_filename = os.path.join(dir_path, song)
+                os.rename(src_mp3_filename, dest_mp3_filename)
+                songs_renamed.append(song)
+                cnt += 1
+                if cnt >= Command.MAX_FILES:
+                    break
+        next_song_list = [x for x in sorted_file_names if x not in songs_renamed]
+        return next_song_list
+
+    @staticmethod
+    def move_songs_by_artist_name(dir_path, sorted_file_names, first_artist_name, last_artist_name, dest_mp3_folder):
+        cnt = 1
+        songs_renamed = []
+        for song in sorted_file_names:
+            if first_artist_name <= Command.get_artist_name(song) <= last_artist_name:
+                _dir, name = os.path.split(song)
                 dest_mp3_filename = os.path.join(dest_mp3_folder, name)
                 src_mp3_filename = os.path.join(dir_path, song)
                 os.rename(src_mp3_filename, dest_mp3_filename)
@@ -191,8 +220,10 @@ class Command(base.NoArgsCommand):
                 sub_name_rep = sub_name + str(cnt)
             else:
                 sub_name_rep = sub_name
-
-            path_with_sub_name = dir_path.replace(Command.RIGHT_SEP, Command.RIGHT_SEP + sub_name_rep, 1)
+            if not Command.FOLDER_PER_ARTIST:
+                path_with_sub_name = dir_path.replace(Command.RIGHT_SEP, Command.RIGHT_SEP + sub_name_rep, 1)
+            else:
+                path_with_sub_name = os.path.join(dir_path, sub_name_rep)
             if not os.path.exists(path_with_sub_name):
                 os.mkdir(path_with_sub_name)
                 return path_with_sub_name

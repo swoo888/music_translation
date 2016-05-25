@@ -71,12 +71,15 @@ class Command(base.NoArgsCommand):
                     default=MUSIC_FOLDER, help='The music folder to translate'),
         make_option('-t', action='store_true', dest='testmode',
                     default=False, help='Test mode only translate one file'),
+        make_option('--destination', action='store', dest='destination',
+                    default='', help='Destination folder to store your translated music'),
     )
 
     def __init__(self):
         super(Command, self).__init__()
         self.folder_to_translate = self.MUSIC_FOLDER
         self.test_mode = False
+        self.destination = ''
 
     def handle_noargs(self, **options):
         if not options['silentmode']:
@@ -88,6 +91,7 @@ class Command(base.NoArgsCommand):
 
         self.folder_to_translate = options['folder']
         self.test_mode = options['testmode']
+        self.destination = options['destination']
 
         lock = lockfile.FileLock('/tmp/translate_chinese_titles')
         lock.acquire(3)
@@ -95,11 +99,12 @@ class Command(base.NoArgsCommand):
             self.translate_chinese_titles()
 
     def translate_chinese_titles(self):
-        destination_music_folder = os.path.join(os.path.dirname(self.folder_to_translate),
-                                                'translate-{}'.format(datetime.datetime.now().strftime('%m-%d-%y')))
-        if not os.path.exists(destination_music_folder):
-            # shutil.rmtree(destination_music_folder, ignore_errors=True)
-            os.mkdir(destination_music_folder)
+        if not self.destination:
+            self.destination = os.path.join(os.path.dirname(self.folder_to_translate),
+                                            'translate-{}'.format(datetime.datetime.now().strftime('%m-%d-%y')))
+        if not os.path.exists(self.destination):
+            # shutil.rmtree(self.destination, ignore_errors=True)
+            os.mkdir(self.destination)
 
         # exclude_mp3_match = re.compile(r'\(\d+\)$', re.I | re.U)
         for dir_path, dir_names, file_names in os.walk(self.folder_to_translate):
@@ -115,7 +120,7 @@ class Command(base.NoArgsCommand):
                         # raise Exception('Cant translate chinese directory name')
                         dir_name_translated = dir_name
                 logger.info(dir_name_translated)
-                destination_dir = os.path.join(destination_music_folder, '{}{}{}{}'.format(
+                destination_dir = os.path.join(self.destination, '{}{}{}{}'.format(
                     Command.LEFT_SEP, dir_name_translated, Command.RIGHT_SEP, dir_name))
                 if not os.path.exists(destination_dir):
                     os.mkdir(destination_dir)
@@ -177,6 +182,12 @@ class Command(base.NoArgsCommand):
         return song_name.split('-')[0][Command.FIRST_CHR_IDX:]
 
     @staticmethod
+    def rm_artist_name(song_name):
+        # <ChenYiWen-TaoHuaZhanXiaoRong.MP3>陈忆文 - 桃花展笑容.mp3
+        artist_name = Command.get_artist_name(song_name)
+        return song_name.replace(artist_name+'-', '', 1)
+
+    @staticmethod
     def move_songs_by_first_char(dir_path, sorted_file_names, first_char, last_char, dest_mp3_folder):
         cnt = 1
         songs_renamed = []
@@ -200,6 +211,8 @@ class Command(base.NoArgsCommand):
         for song in sorted_file_names:
             if first_artist_name <= Command.get_artist_name(song) <= last_artist_name:
                 _dir, name = os.path.split(song)
+                if Command.FOLDER_PER_ARTIST:
+                    name = Command.rm_artist_name(name)
                 dest_mp3_filename = os.path.join(dest_mp3_folder, name)
                 src_mp3_filename = os.path.join(dir_path, song)
                 os.rename(src_mp3_filename, dest_mp3_filename)

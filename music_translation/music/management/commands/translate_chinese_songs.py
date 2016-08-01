@@ -6,11 +6,14 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 
 import lockfile
+import mutagen.id3._frames
 import os
 import re
 import shutil
 from bs4 import BeautifulSoup
 from django.core.management import BaseCommand
+from mutagen.id3 import ID3
+from mutagen.id3 import ID3NoHeaderError
 from shutil import copy
 
 logger = logging.getLogger('music_translation.music.translate_chinese_songs')
@@ -35,14 +38,25 @@ def copy_and_convert_music_file_to_dest(src_file_full_path, dest_file_full_path)
 
 
 def tag_song(dest_song_full_path_mp3, artist_name_tag, song_name_tag):
-    # id3tag --artist=冷漠,王雅洁,WangYaJie,LengMo --album=ChouSheng test_cd.mp3
-    tag_cmd = "/usr/local/bin/id3tag --artist='{}' --song='{}' '{}'".format(
-        artist_name_tag, song_name_tag, dest_song_full_path_mp3)
-    logger.info('tag cmd: {}'.format(tag_cmd))
     try:
-        subprocess.call(tag_cmd, shell=True)
-    except subprocess.CalledProcessError as e:
-        logger.error(e)
+        tags = ID3('/Users/StevenWoo/test_cd.mp3')
+    except ID3NoHeaderError:
+        # tags = ID3()
+        return
+    album_tag = tags["TALB"].text[0]
+    if is_chinese(album_tag):
+        album_tag = Command.get_ch_text_translation(album_tag) + ", " + album_tag
+
+    tags["TIT2"] = mutagen.id3._frames.TIT2(encoding=3, text=song_name_tag)
+    tags["TALB"] = mutagen.id3._frames.TALB(encoding=3, text=album_tag)
+    # tags["TPE2"] = TPE2(encoding=3, text=u'mutagen Band')
+    # tags["COMM"] = COMM(encoding=3, lang=u'eng', desc='desc', text=u'mutagen comment')
+    tags["TPE1"] = mutagen.id3._frames.TPE1(encoding=3, text=artist_name_tag)
+    # tags["TCOM"] = TCOM(encoding=3, text=u'mutagen Composer')
+    # tags["TCON"] = TCON(encoding=3, text=u'mutagen Genre')
+    # tags["TDRC"] = TDRC(encoding=3, text=u'2010')
+    # tags["TRCK"] = COMM(encoding=3, text=u'track_number')
+    tags.save('/Users/StevenWoo/test_cd.mp3')
 
 
 def translate_chinese_song(src_song_full_path, dest_dir, artist_name, song_name):
@@ -152,11 +166,14 @@ class Command(BaseCommand):
                     song_name_noext = os.path.splitext(filename)[0]
                     logger.info('Processing song name: {}'.format(song_name_noext))
                     [artist_name, song_name] = song_name_noext.split(' - ', 1)
-                    pool.apply_async(translate_chinese_song,
-                                     args=(os.path.join(root, filename),
-                                           destination_dir, artist_name, song_name))
                     if self.test_mode:
+                        translate_chinese_song(os.path.join(root, filename), destination_dir, artist_name, song_name)
                         break
+                    else:
+                        pool.apply_async(translate_chinese_song, args=(os.path.join(root, filename),
+                                                                       destination_dir, artist_name, song_name))
+            if self.test_mode:
+                break
         pool.close()
         pool.join()
 

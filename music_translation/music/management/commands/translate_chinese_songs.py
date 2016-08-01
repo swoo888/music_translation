@@ -39,7 +39,7 @@ def copy_and_convert_music_file_to_dest(src_file_full_path, dest_file_full_path)
 
 def tag_song(dest_song_full_path_mp3, artist_name_tag, song_name_tag):
     try:
-        tags = ID3('/Users/StevenWoo/test_cd.mp3')
+        tags = ID3(dest_song_full_path_mp3)
     except ID3NoHeaderError:
         # tags = ID3()
         return
@@ -56,7 +56,7 @@ def tag_song(dest_song_full_path_mp3, artist_name_tag, song_name_tag):
     # tags["TCON"] = TCON(encoding=3, text=u'mutagen Genre')
     # tags["TDRC"] = TDRC(encoding=3, text=u'2010')
     # tags["TRCK"] = COMM(encoding=3, text=u'track_number')
-    tags.save('/Users/StevenWoo/test_cd.mp3')
+    tags.save(dest_song_full_path_mp3)
 
 
 def translate_chinese_song(src_song_full_path, dest_dir, artist_name, song_name):

@@ -45,7 +45,7 @@ def tag_song(dest_song_full_path_mp3, artist_name_tag, song_name_tag):
         return
     album_tag = tags["TALB"].text[0]
     if is_chinese(album_tag):
-        album_tag = Command.get_ch_text_translation(album_tag) + ", " + album_tag
+        album_tag = Command.get_ch_text_translation(album_tag) + " " + album_tag
 
     tags["TIT2"] = mutagen.id3._frames.TIT2(encoding=3, text=song_name_tag)
     tags["TALB"] = mutagen.id3._frames.TALB(encoding=3, text=album_tag)
@@ -62,10 +62,10 @@ def tag_song(dest_song_full_path_mp3, artist_name_tag, song_name_tag):
 def translate_chinese_song(src_song_full_path, dest_dir, artist_name, song_name):
     artist_name_tag = artist_name
     if is_chinese(artist_name):
-        artist_name_tag = Command.get_ch_text_translation(artist_name) + ", " + artist_name
+        artist_name_tag = Command.get_ch_text_translation(artist_name) + " " + artist_name
     song_name_tag = song_name
     if is_chinese(song_name):
-        song_name_tag = Command.get_ch_text_translation(song_name) + ", " + song_name
+        song_name_tag = Command.get_ch_text_translation(song_name) + " " + song_name
     src_ext = os.path.splitext(src_song_full_path)[1]
     dest_song_full_path = os.path.join(dest_dir, song_name_tag) + src_ext
     dest_song_full_path_mp3 = copy_and_convert_music_file_to_dest(src_song_full_path, dest_song_full_path)

@@ -200,8 +200,8 @@ class Command(BaseCommand):
         while cnt < 3:
             try:
                 response = urlopen(
-                    url='http://zhongwenzhuanpinyin.51240.com/web_system/51240_com_www/system/file/' +
-                        'zhongwenzhuanpinyin/data/?ajaxtimestamp=144295876963',
+                    url='https://zhongwenzhuanpinyin.51240.com/web_system/51240_com_www/system/file/' +
+                        'zhongwenzhuanpinyin/data/?ajaxtimestamp=1500957830153',
                     data=data)
             except URLError:
                 logger.info('web connection failed')

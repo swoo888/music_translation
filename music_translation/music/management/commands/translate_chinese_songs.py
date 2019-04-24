@@ -1,5 +1,6 @@
 import logging
 import multiprocessing
+import ntpath
 import subprocess
 from urllib.error import URLError
 from urllib.parse import urlencode

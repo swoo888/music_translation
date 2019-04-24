@@ -1,0 +1,4 @@
+django
+lockfile
+mutagen
+bs4

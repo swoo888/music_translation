@@ -25,3 +25,4 @@ bin
 *.iml
 .python-version
 *.log
+venv/
